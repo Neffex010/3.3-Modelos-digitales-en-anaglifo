@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor Anaglifo - Modelo Mixamo</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; /* Evita barras de desplazamiento */
+            background-color: #111; /* Fondo oscuro para resaltar el efecto 3D */
+        }
+        canvas { 
+            display: block; 
+        }
+    </style>
+</head>
+<body>
+    <!-- Mapa de importación para cargar Three.js y sus complementos -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
