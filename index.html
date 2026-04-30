@@ -1,30 +1,40 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8" />
     <title>Visor Anaglifo - Modelo Mixamo</title>
-    <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; /* Evita barras de desplazamiento */
-            background-color: #111; /* Fondo oscuro para resaltar el efecto 3D */
-        }
-        canvas { 
-            display: block; 
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <!-- Enlazamos el nuevo CSS limpio -->
+    <link rel="stylesheet" href="./main.css">
 </head>
 <body>
-    <!-- Mapa de importación para cargar Three.js y sus complementos -->
+    <!-- Instrucciones simples en pantalla -->
+    <div class="instructions">
+        <h1>VISOR 3D ANAGLIFO</h1>
+        <p>Ponte tus lentes Rojo/Cian. Usa el mouse para rotar el modelo y la rueda para hacer zoom.</p>
+    </div>
+
+    <!-- CONTENEDOR 3D -->
+    <main id="app">
+        <div id="container" aria-label="Escenario 3D anaglifo"></div>
+    </main>
+
+    <!-- MAPA DE IMPORTACIÓN LOCAL (Apunta a tus carpetas build y jsm) -->
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
+    {
+        "imports": {
+            "three": "./build/three.module.js",
+            "three/addons/": "./jsm/"
         }
+    }
     </script>
-    <script type="module" src="main.js"></script>
+
+    <!-- Script principal -->
+    <script type="module" src="./main.js"></script>
 </body>
 </html>
