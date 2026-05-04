@@ -301,3 +301,14 @@ html, body {
     border-radius: var(--radio) !important;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
 }
+
+/* ============================================================
+   PANEL IZQUIERDO DE MODELOS (lil-gui posicionado a la izquierda)
+   ============================================================ */
+.lil-gui.left-panel {
+    position: absolute !important;
+    top: 20px !important;
+    left: 20px !important;
+    right: auto !important;
+    margin: 0 !important;
+}

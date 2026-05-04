@@ -29,11 +29,18 @@ const clock = new THREE.Clock(); // ✅ FIX #4: reemplaza lastTime manual
 // Posición y target iniciales de la cámara (para el reset)
 const CAMERA_INIT = { pos: new THREE.Vector3(0, 4, 12), target: new THREE.Vector3(0, 3, 0) };
 
-const nombreModelo = 'Capoeira.fbx';
+// ─── Modelos disponibles ──────────────────────────────────────────────────────
+const MODELOS = [
+    'Capoeira.fbx',
+    'Standard Run.fbx',
+    'Jump Attack.fbx',
+    'Thriller Part 3.fbx',
+    'Flying Knee Punch Combo.fbx'
+];
 
 // ─── Parámetros de la GUI ─────────────────────────────────────────────────────
 const parametros = {
-    // ✅ FIX #1: "popOut" ahora controla effect.stereo.focus (plano de convergencia real)
+    modelo:            'Capoeira.fbx',
     convergencia:      8,
     separacionEfecto:  0.5,
     escalaModelo:      0.05,
@@ -144,7 +151,7 @@ function cargarModelo() {
     const loader = new FBXLoader();
 
     loader.load(
-        `models/${nombreModelo}`,
+        `models/${parametros.modelo}`,
 
         // ✅ FIX #2: callback de éxito
         function onLoad(object) {
@@ -198,14 +205,37 @@ function cargarModelo() {
             overlay.classList.add('oculto');
             const errorOverlay = document.getElementById('error-overlay');
             document.getElementById('error-message').textContent =
-                `No se pudo cargar "${nombreModelo}". Verifica que el archivo exista en la carpeta /models/.`;
+                `No se pudo cargar "${parametros.modelo}". Verifica que el archivo exista en la carpeta /models/.`;
             errorOverlay.hidden = false;
         }
     );
 }
 
 // ─── GUI de controles ──────────────────────────────────────────────────────────
+function cambiarModelo(nombre) {
+    parametros.modelo = nombre;
+    if (mixer) {
+        mixer.stopAllAction();
+        mixer = null;
+    }
+    cargarModelo();
+}
+
 function setupGUI() {
+
+    // ── Panel IZQUIERDO: selector de modelo ──────────────────────────────────
+    const guiModelos = new GUI({ title: '🎭 Modelos' });
+    guiModelos.domElement.style.position = 'absolute';
+    guiModelos.domElement.style.top      = '20px';
+    guiModelos.domElement.style.left     = '20px';
+    guiModelos.domElement.style.right    = 'auto';
+
+    MODELOS.forEach(nombre => {
+        const label = nombre.replace('.fbx', '');
+        guiModelos.add({ cargar: () => cambiarModelo(nombre) }, 'cargar').name(label);
+    });
+
+    // ── Panel DERECHO: ajustes de escena (igual que antes) ───────────────────
     const gui = new GUI({ title: 'Ajustes del Escenario' });
 
     // ✅ FIX #1: convergencia controla el plano focal del efecto estéreo
