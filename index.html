@@ -2,29 +2,61 @@
 <html lang="es">
 <head>
     <meta charset="utf-8" />
+    <meta name="description" content="Visor 3D anaglifo interactivo con modelos Mixamo. Requiere lentes Rojo/Cián." />
     <title>Visor Anaglifo - Modelo Mixamo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 
-    <!-- Enlazamos el nuevo CSS limpio -->
     <link rel="stylesheet" href="./main.css">
 </head>
 <body>
-    <!-- Instrucciones simples en pantalla -->
-    <div class="instructions">
+
+    <!-- OVERLAY DE CARGA -->
+    <div id="loading-overlay" role="status" aria-live="polite" aria-label="Cargando modelo 3D">
+        <div class="loader-content">
+            <div class="loader-spinner" aria-hidden="true">
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+            </div>
+            <p class="loader-label">CARGANDO MODELO</p>
+            <div class="loader-bar-track" aria-hidden="true">
+                <div id="loader-bar" class="loader-bar-fill"></div>
+            </div>
+            <p id="loader-percent" class="loader-percent">0%</p>
+        </div>
+    </div>
+
+    <!-- MENSAJE DE ERROR -->
+    <div id="error-overlay" role="alert" aria-live="assertive" hidden>
+        <div class="error-content">
+            <span class="error-icon" aria-hidden="true">⚠</span>
+            <h2>Error al cargar el modelo</h2>
+            <p id="error-message">No se pudo cargar el archivo FBX.</p>
+            <button id="btn-retry">Reintentar</button>
+        </div>
+    </div>
+
+    <!-- INSTRUCCIONES -->
+    <header class="instructions" aria-label="Instrucciones de uso">
         <h1>VISOR 3D ANAGLIFO</h1>
-        <p>Ponte tus lentes Rojo/Cian. Usa el mouse para rotar el modelo y la rueda para hacer zoom.</p>
+        <p id="instructions-text">Ponte tus lentes Rojo/Cián · Arrastra para rotar · Rueda para zoom</p>
+    </header>
+
+    <!-- ATAJOS DE TECLADO -->
+    <div class="keyboard-hints" aria-label="Atajos de teclado">
+        <kbd>R</kbd> Resetear cámara &nbsp;|&nbsp; <kbd>Space</kbd> Pausar animación
     </div>
 
     <!-- CONTENEDOR 3D -->
     <main id="app">
-        <div id="container" aria-label="Escenario 3D anaglifo"></div>
+        <div id="container" role="img" aria-label="Escenario 3D con modelo animado en efecto anaglifo"></div>
     </main>
 
-    <!-- MAPA DE IMPORTACIÓN LOCAL (Apunta a tus carpetas build y jsm) -->
+    <!-- MAPA DE IMPORTACIÓN LOCAL -->
     <script type="importmap">
     {
         "imports": {
@@ -34,7 +66,6 @@
     }
     </script>
 
-    <!-- Script principal -->
     <script type="module" src="./main.js"></script>
 </body>
 </html>

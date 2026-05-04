@@ -1,27 +1,40 @@
-/* =========================
-   RESET Y BASE
-========================= */
+/* ============================================================
+   VARIABLES Y RESET
+   ============================================================ */
+:root {
+    --color-acento:    #e6c15a;
+    --color-acento2:   #5ac8e6;
+    --color-fondo:     #1a1a2e;
+    --color-superficie:#16213e;
+    --color-texto:     #e8e8f0;
+    --color-texto-dim: rgba(232, 232, 240, 0.55);
+    --color-error:     #ff4c4c;
+    --radio:           8px;
+    --font-display:    'Orbitron', sans-serif;
+    --font-body:       'Inter', sans-serif;
+    --transicion:      0.3s ease;
+}
+
 *,
 *::before,
 *::after {
     box-sizing: border-box;
 }
 
-html,
-body {
+html, body {
     margin: 0;
     padding: 0;
     width: 100%;
     height: 100%;
-    overflow: hidden; /* Evita el scroll */
-    font-family: 'Roboto', sans-serif;
-    background-color: #050505; /* Fondo muy oscuro para resaltar el anaglifo */
-    color: #ffffff;
+    overflow: hidden;
+    font-family: var(--font-body);
+    background-color: var(--color-fondo);
+    color: var(--color-texto);
 }
 
-/* =========================
-   CONTENEDOR DEL LIENZO
-========================= */
+/* ============================================================
+   CONTENEDOR PRINCIPAL
+   ============================================================ */
 #app {
     position: relative;
     width: 100%;
@@ -37,12 +50,181 @@ body {
 }
 
 #container canvas {
-    display: block; /* Elimina márgenes fantasma del canvas */
+    display: block;
 }
 
-/* =========================
-   INTERFAZ DE USUARIO (Instrucciones)
-========================= */
+/* ============================================================
+   OVERLAY DE CARGA
+   ============================================================ */
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-fondo);
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+
+#loading-overlay.oculto {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.loader-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+}
+
+/* Spinner de tres anillos */
+.loader-spinner {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 8px;
+}
+
+.spinner-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    animation: spin 1.4s linear infinite;
+}
+
+.spinner-ring:nth-child(1) {
+    border-top-color: var(--color-acento);
+    animation-duration: 1.4s;
+}
+
+.spinner-ring:nth-child(2) {
+    inset: 10px;
+    border-right-color: var(--color-acento2);
+    animation-duration: 1.0s;
+    animation-direction: reverse;
+}
+
+.spinner-ring:nth-child(3) {
+    inset: 20px;
+    border-bottom-color: var(--color-acento);
+    animation-duration: 0.7s;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loader-label {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 4px;
+    color: var(--color-acento);
+}
+
+.loader-bar-track {
+    width: 220px;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.loader-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--color-acento), var(--color-acento2));
+    border-radius: 2px;
+    transition: width 0.2s ease;
+}
+
+.loader-percent {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    color: var(--color-texto-dim);
+    letter-spacing: 2px;
+}
+
+/* ============================================================
+   OVERLAY DE ERROR
+   ============================================================ */
+#error-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 101;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 26, 46, 0.95);
+    backdrop-filter: blur(8px);
+}
+
+#error-overlay[hidden] {
+    display: none;
+}
+
+.error-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px;
+    background: var(--color-superficie);
+    border: 1px solid var(--color-error);
+    border-radius: var(--radio);
+    max-width: 380px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(255, 76, 76, 0.2);
+}
+
+.error-icon {
+    font-size: 2.5rem;
+    color: var(--color-error);
+}
+
+.error-content h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--color-error);
+    letter-spacing: 1px;
+}
+
+.error-content p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-texto-dim);
+    line-height: 1.6;
+}
+
+#btn-retry {
+    margin-top: 8px;
+    padding: 10px 28px;
+    background: transparent;
+    border: 1px solid var(--color-acento);
+    border-radius: var(--radio);
+    color: var(--color-acento);
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: background var(--transicion), color var(--transicion);
+}
+
+#btn-retry:hover {
+    background: var(--color-acento);
+    color: var(--color-fondo);
+}
+
+/* ============================================================
+   INSTRUCCIONES SUPERIORES
+   ============================================================ */
 .instructions {
     position: absolute;
     top: 20px;
@@ -50,19 +232,72 @@ body {
     width: 100%;
     text-align: center;
     z-index: 10;
-    pointer-events: none; /* Permite hacer clic a través del texto */
-    text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+    pointer-events: none;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
 }
 
 .instructions h1 {
     margin: 0;
-    font-size: 1.8rem;
-    letter-spacing: 2px;
-    color: #e6c15a;
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    letter-spacing: 4px;
+    color: var(--color-acento);
 }
 
 .instructions p {
-    margin: 8px 0 0;
-    font-size: 0.95rem;
-    color: rgba(255, 255, 255, 0.8);
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+    color: var(--color-texto-dim);
+    letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   ATAJOS DE TECLADO (esquina inferior izquierda)
+   ============================================================ */
+.keyboard-hints {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 10;
+    pointer-events: none;
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.5px;
+}
+
+.keyboard-hints kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    background: rgba(255,255,255,0.07);
+}
+
+/* En móvil: ocultar hints de teclado, ajustar texto */
+@media (max-width: 600px) {
+    .instructions h1 {
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+    }
+
+    .instructions p {
+        font-size: 0.75rem;
+        padding: 0 16px;
+    }
+
+    .keyboard-hints {
+        display: none;
+    }
+}
+
+/* ============================================================
+   PANEL lil-gui
+   ============================================================ */
+.lil-gui {
+    margin-top: 20px !important;
+    margin-right: 20px !important;
+    border-radius: var(--radio) !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
 }
