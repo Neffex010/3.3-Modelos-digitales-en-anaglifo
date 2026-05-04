@@ -81,7 +81,6 @@ html, body {
     text-align: center;
 }
 
-/* Spinner de tres anillos */
 .loader-spinner {
     position: relative;
     width: 80px;
@@ -252,7 +251,7 @@ html, body {
 }
 
 /* ============================================================
-   ATAJOS DE TECLADO (esquina inferior izquierda)
+   ATAJOS DE TECLADO
    ============================================================ */
 .keyboard-hints {
     position: absolute;
@@ -275,18 +274,15 @@ html, body {
     background: rgba(255,255,255,0.07);
 }
 
-/* En móvil: ocultar hints de teclado, ajustar texto */
 @media (max-width: 600px) {
     .instructions h1 {
         font-size: 1.1rem;
         letter-spacing: 2px;
     }
-
     .instructions p {
         font-size: 0.75rem;
         padding: 0 16px;
     }
-
     .keyboard-hints {
         display: none;
     }
@@ -300,15 +296,4 @@ html, body {
     margin-right: 20px !important;
     border-radius: var(--radio) !important;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
-}
-
-/* ============================================================
-   PANEL IZQUIERDO DE MODELOS (lil-gui posicionado a la izquierda)
-   ============================================================ */
-.lil-gui.left-panel {
-    position: absolute !important;
-    top: 20px !important;
-    left: 20px !important;
-    right: auto !important;
-    margin: 0 !important;
 }

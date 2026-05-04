@@ -1,16 +1,5 @@
 /**
- * main.js — Visor 3D Anaglifo
- *
- * Correcciones aplicadas:
- *  1. camera.focus eliminado; pop-out ahora controla effect.stereo.focus (real).
- *  2. FBXLoader con callbacks de progreso y error.
- *  3. Overlay de carga con barra de progreso funcional.
- *  4. THREE.Clock reemplaza el delta manual (robusto ante cambio de pestaña).
- *  5. controls.update() duplicado eliminado del init().
- *  6. Atajos de teclado: R = resetear cámara, Space = pausar animación.
- *  7. Instrucciones dinámicas según dispositivo táctil.
- *  8. Dispose de recursos al redimensionar (evita fugas de memoria GPU).
- *  9. Botón de reintento en caso de error de carga.
+ * main.js — Visor 3D Anaglifo (Versión Profesional Definitiva)
  */
 
 import * as THREE from 'three';
@@ -21,15 +10,19 @@ import { GUI }             from 'three/addons/libs/lil-gui.module.min.js';
 
 // ─── Estado global ────────────────────────────────────────────────────────────
 let camera, scene, renderer, effect, controls, mixer;
-let grid, ambientLight, modeloCargado;
+let grid, ambientLight, modeloCargado, guiGlobal;
 let animacionPausada = false;
 
-const clock = new THREE.Clock(); // ✅ FIX #4: reemplaza lastTime manual
+const clock = new THREE.Clock(); 
 
 // Posición y target iniciales de la cámara (para el reset)
-const CAMERA_INIT = { pos: new THREE.Vector3(0, 4, 12), target: new THREE.Vector3(0, 3, 0) };
+const CAMERA_INIT = { 
+    pos: new THREE.Vector3(0, 3, 10), 
+    target: new THREE.Vector3(0, 3, 0),
+    fov: 60
+};
 
-// ─── Modelos disponibles ──────────────────────────────────────────────────────
+// ─── Modelos disponibles (Asegúrate de que existan en la carpeta /models/) ───
 const MODELOS = [
     'Capoeira.fbx',
     'Standard Run.fbx',
@@ -38,29 +31,25 @@ const MODELOS = [
     'Flying Knee Punch Combo.fbx'
 ];
 
-// ─── Parámetros de la GUI ─────────────────────────────────────────────────────
-const parametros = {
+// ─── Valores por Defecto (Para el botón de Reset) ────────────────────────────
+const PARAMETROS_DEFAULT = {
     modelo:            'Capoeira.fbx',
-    convergencia:      8,
-    separacionEfecto:  0.5,
+    // Efecto 3D
+    profundidad3D:     10,    // 10 = Neutro
+    separacionFija:    0.064, // Separación base ocular
+    // Cámara
+    fov:               60,
+    zoomVisual:        1,
+    alturaCamara:      3,
+    // Entorno
     escalaModelo:      0.05,
     colorFondo:        '#555555',
     brillo:            2.5,
     verRejilla:        true
 };
 
-// ─── Helper: acceso robusto a StereoCamera.focus ──────────────────────────────
-// Según la versión de Three.js, la propiedad interna puede llamarse
-// 'stereo' (pública, versiones antiguas) o '_stereo' (privada, versiones nuevas).
-function setStereoFocus(valor) {
-    const stereo = effect.stereo ?? effect._stereo;
-    if (stereo) {
-        stereo.focus = valor;
-    } else {
-        // Fallback: simular pop-out ajustando posición Z de la cámara
-        camera.position.z = CAMERA_INIT.pos.z + (valor - 8);
-    }
-}
+// Objeto reactivo que la GUI modificará
+const parametros = JSON.parse(JSON.stringify(PARAMETROS_DEFAULT));
 
 // ─── Inicialización ────────────────────────────────────────────────────────────
 init();
@@ -68,22 +57,18 @@ init();
 function init() {
     const container = document.getElementById('container');
 
-    // Instrucciones adaptadas al dispositivo
     if ('ontouchstart' in window) {
         document.getElementById('instructions-text').textContent =
             'Ponte tus lentes Rojo/Cián · Arrastra para rotar · Pellizca para zoom';
     }
 
-    // Escena
     scene = new THREE.Scene();
     scene.background = new THREE.Color(parametros.colorFondo);
     scene.fog = new THREE.Fog(parametros.colorFondo, 10, 80);
 
-    // Cámara
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera = new THREE.PerspectiveCamera(parametros.fov, window.innerWidth / window.innerHeight, 0.1, 500);
     camera.position.copy(CAMERA_INIT.pos);
 
-    // Luces
     ambientLight = new THREE.AmbientLight(0xffffff, parametros.brillo);
     scene.add(ambientLight);
 
@@ -95,48 +80,35 @@ function init() {
     dirLight.position.set(0, 10, 5);
     scene.add(dirLight);
 
-    // Rejilla de piso
     grid = new THREE.GridHelper(50, 20, 0xffffff, 0xffffff);
     grid.material.opacity = 0.15;
     grid.material.transparent = true;
     grid.visible = parametros.verRejilla;
     scene.add(grid);
 
-    // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Efecto Anaglifo
     effect = new AnaglyphEffect(renderer);
     effect.setSize(window.innerWidth, window.innerHeight);
-    effect.separation = parametros.separacionEfecto;
-    setStereoFocus(parametros.convergencia); // robusto ante distintas versiones de Three.js
 
-    // Controles de órbita
     controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(CAMERA_INIT.target);
     controls.enableDamping  = true;
     controls.dampingFactor  = 0.05;
-    // ✅ FIX #5: eliminado controls.update() aquí; solo se llama en animate()
 
-    // Carga del modelo con progreso y manejo de errores
     cargarModelo();
-
-    // GUI de controles
     setupGUI();
 
-    // Eventos
     window.addEventListener('resize', onWindowResize);
-    window.addEventListener('keydown', onKeyDown);         // ✅ FIX #6: atajos de teclado
+    window.addEventListener('keydown', onKeyDown);
 
-    // Botón de reintento
     document.getElementById('btn-retry').addEventListener('click', () => {
         document.getElementById('error-overlay').hidden = true;
         cargarModelo();
     });
 
-    // Arrancar el loop
     renderer.setAnimationLoop(animate);
 }
 
@@ -152,8 +124,6 @@ function cargarModelo() {
 
     loader.load(
         `models/${parametros.modelo}`,
-
-        // ✅ FIX #2: callback de éxito
         function onLoad(object) {
             if (object.animations && object.animations.length > 0) {
                 mixer = new THREE.AnimationMixer(object);
@@ -167,17 +137,13 @@ function cargarModelo() {
                 }
             });
 
-            // Si ya había un modelo previo, limpiarlo
             if (modeloCargado) {
                 scene.remove(modeloCargado);
                 modeloCargado.traverse(child => {
                     if (child.isMesh) {
                         child.geometry.dispose();
-                        if (Array.isArray(child.material)) {
-                            child.material.forEach(m => m.dispose());
-                        } else {
-                            child.material.dispose();
-                        }
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
                     }
                 });
             }
@@ -186,11 +152,8 @@ function cargarModelo() {
             modeloCargado.scale.setScalar(parametros.escalaModelo);
             scene.add(modeloCargado);
 
-            // Ocultar overlay con fade
             overlay.classList.add('oculto');
         },
-
-        // ✅ FIX #2: callback de progreso
         function onProgress(xhr) {
             if (xhr.lengthComputable) {
                 const pct = Math.round((xhr.loaded / xhr.total) * 100);
@@ -198,17 +161,29 @@ function cargarModelo() {
                 barPercent.textContent = pct + '%';
             }
         },
-
-        // ✅ FIX #2: callback de error
         function onError(error) {
             console.error('Error al cargar el modelo FBX:', error);
             overlay.classList.add('oculto');
-            const errorOverlay = document.getElementById('error-overlay');
             document.getElementById('error-message').textContent =
                 `No se pudo cargar "${parametros.modelo}". Verifica que el archivo exista en la carpeta /models/.`;
-            errorOverlay.hidden = false;
+            document.getElementById('error-overlay').hidden = false;
         }
     );
+}
+
+// ─── Actualizar Matriz de Cámara ───────────────────────────────────────────────
+function actualizarCamaraOptica() {
+    const direccion = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+    camera.position.copy(controls.target).addScaledVector(direccion, parametros.profundidad3D);
+    
+    camera.zoom = (parametros.profundidad3D / 10) * parametros.zoomVisual; 
+    
+    camera.position.y = parametros.alturaCamara;
+    controls.target.y = parametros.alturaCamara;
+
+    camera.fov = parametros.fov;
+    camera.updateProjectionMatrix();
+    controls.update();
 }
 
 // ─── GUI de controles ──────────────────────────────────────────────────────────
@@ -222,8 +197,6 @@ function cambiarModelo(nombre) {
 }
 
 function setupGUI() {
-
-    // ── Panel IZQUIERDO: selector de modelo ──────────────────────────────────
     const guiModelos = new GUI({ title: '🎭 Modelos' });
     guiModelos.domElement.style.position = 'absolute';
     guiModelos.domElement.style.top      = '20px';
@@ -235,69 +208,88 @@ function setupGUI() {
         guiModelos.add({ cargar: () => cambiarModelo(nombre) }, 'cargar').name(label);
     });
 
-    // ── Panel DERECHO: ajustes de escena (igual que antes) ───────────────────
-    const gui = new GUI({ title: 'Ajustes del Escenario' });
+    guiGlobal = new GUI({ title: 'Ajustes del Escenario', width: 320 });
 
-    // ✅ FIX #1: convergencia controla el plano focal del efecto estéreo
-    gui.add(parametros, 'convergencia', 1, 30, 0.5)
-        .name('Convergencia (Pop-Out)')
-        .onChange(valor => {
-            setStereoFocus(valor);
-        });
+    const folder3D = guiGlobal.addFolder('Efecto Anaglifo (Rojo/Cián)');
+    folder3D.add(parametros, 'profundidad3D', 4, 25, 0.5)
+        .name('Intensidad (Pop-Out)')
+        .onChange(actualizarCamaraOptica);
+    
+    // Al cambiar este valor, se aplica directamente en el loop animate()
+    folder3D.add(parametros, 'separacionFija', 0.0, 0.15, 0.001)
+        .name('Separación Ocular Fina');
 
-    gui.add(parametros, 'separacionEfecto', 0, 2, 0.01)
-        .name('Separación ocular')
-        .onChange(valor => {
-            effect.separation = valor;
-        });
+    const folderCamara = guiGlobal.addFolder('Controles de Cámara');
+    folderCamara.add(parametros, 'fov', 30, 120, 1)
+        .name('Campo de Visión (FOV)')
+        .onChange(actualizarCamaraOptica);
+    folderCamara.add(parametros, 'zoomVisual', 0.5, 3, 0.1)
+        .name('Zoom Lente')
+        .onChange(actualizarCamaraOptica);
+    folderCamara.add(parametros, 'alturaCamara', 0, 8, 0.1)
+        .name('Altura de Enfoque')
+        .onChange(actualizarCamaraOptica);
 
-    gui.add(parametros, 'escalaModelo', 0.01, 0.15, 0.005)
+    const folderEntorno = guiGlobal.addFolder('Entorno Visual');
+    folderEntorno.add(parametros, 'escalaModelo', 0.01, 0.15, 0.005)
         .name('Tamaño del modelo')
         .onChange(valor => {
             if (modeloCargado) modeloCargado.scale.setScalar(valor);
         });
-
-    gui.addColor(parametros, 'colorFondo')
+    folderEntorno.addColor(parametros, 'colorFondo')
         .name('Color de fondo')
         .onChange(color => {
             scene.background.set(color);
             scene.fog.color.set(color);
         });
-
-    gui.add(parametros, 'brillo', 0, 5, 0.1)
+    folderEntorno.add(parametros, 'brillo', 0, 5, 0.1)
         .name('Luz ambiental')
         .onChange(valor => {
             ambientLight.intensity = valor;
         });
-
-    gui.add(parametros, 'verRejilla')
+    folderEntorno.add(parametros, 'verRejilla')
         .name('Mostrar piso')
         .onChange(valor => {
             grid.visible = valor;
         });
 
-    // Botón de reset de cámara en la GUI también
-    gui.add({ reset: resetearCamara }, 'reset').name('⟳ Resetear cámara');
+    guiGlobal.add({ reset: resetearTodo }, 'reset').name('🔄 Restaurar Ajustes por Defecto');
+    
+    folder3D.open();
+    folderCamara.close();
+}
+
+// ─── Reset General ─────────────────────────────────────────────────────────────
+function resetearTodo() {
+    Object.assign(parametros, PARAMETROS_DEFAULT);
+
+    scene.background.set(parametros.colorFondo);
+    scene.fog.color.set(parametros.colorFondo);
+    ambientLight.intensity = parametros.brillo;
+    grid.visible = parametros.verRejilla;
+    if (modeloCargado) modeloCargado.scale.setScalar(parametros.escalaModelo);
+
+    camera.position.copy(CAMERA_INIT.pos);
+    controls.target.copy(CAMERA_INIT.target);
+    actualizarCamaraOptica(); 
+
+    guiGlobal.controllersRecursive().forEach(controlador => {
+        controlador.updateDisplay();
+    });
 }
 
 // ─── Eventos de teclado ────────────────────────────────────────────────────────
 function onKeyDown(e) {
     switch (e.code) {
         case 'KeyR':
-            resetearCamara();
+            resetearTodo();
             break;
         case 'Space':
             e.preventDefault();
             animacionPausada = !animacionPausada;
-            if (!animacionPausada) clock.getDelta(); // descarta el delta acumulado al despausar
+            if (!animacionPausada) clock.getDelta(); 
             break;
     }
-}
-
-function resetearCamara() {
-    camera.position.copy(CAMERA_INIT.pos);
-    controls.target.copy(CAMERA_INIT.target);
-    controls.update();
 }
 
 // ─── Redimensionamiento ────────────────────────────────────────────────────────
@@ -309,12 +301,15 @@ function onWindowResize() {
 
 // ─── Loop de animación ─────────────────────────────────────────────────────────
 function animate() {
-    // ✅ FIX #4: THREE.Clock es robusto ante cambios de pestaña
     const delta = animacionPausada ? 0 : clock.getDelta();
 
     if (mixer) mixer.update(delta);
 
-    controls.update(); // ✅ FIX #5: única llamada a controls.update()
+    controls.update(); 
+
+    // INYECCIÓN OBLIGATORIA: Fuerza a Three.js a usar nuestra separación en cada fotograma
+    const stereo = effect.stereo ?? effect._stereo;
+    if (stereo) stereo.eyeSep = parametros.separacionFija;
 
     effect.render(scene, camera);
 }
