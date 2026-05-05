@@ -15,11 +15,15 @@ const MODELS_PATH = 'models/';
 
 // ---------- ESCENA, CÁMARA BASE ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111122);
-scene.fog = new THREE.Fog(0x111122, 10, 50);
+scene.background = new THREE.Color(0x446688);
+scene.fog = new THREE.Fog(0x446688, 10, 60);
 
-// Cámara base (centro) – se usa para los controles, pero renderizaremos con dos cámaras desplazadas
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(
+    45,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+);
 camera.position.set(5, 3, 8);
 camera.lookAt(0, 1, 0);
 
@@ -28,9 +32,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
-// Controles de órbita (actúan sobre la cámara base)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1, 0);
 controls.enableDamping = true;
@@ -38,9 +44,10 @@ controls.dampingFactor = 0.05;
 controls.update();
 
 // ---------- ILUMINACIÓN ----------
-const ambientLight = new THREE.AmbientLight(0x404066);
+const ambientLight = new THREE.AmbientLight(0xffffff, 3.0);
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 4.0);
 dirLight.position.set(10, 15, 5);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.width = 1024;
@@ -52,42 +59,66 @@ dirLight.shadow.camera.right = 10;
 dirLight.shadow.camera.top = 10;
 dirLight.shadow.camera.bottom = -10;
 scene.add(dirLight);
-const backLight = new THREE.PointLight(0x4466ff, 1, 20);
+
+const backLight = new THREE.PointLight(0xaaccff, 4, 20);
 backLight.position.set(-5, 2, -5);
 scene.add(backLight);
 
-// Suelo
+// ---------- SUELO CON TEXTURA DE TABLERO ----------
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 512;
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#8899aa';
+ctx.fillRect(0, 0, 512, 512);
+const sq = 64;
+for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+        if ((i + j) % 2 === 0) {
+            ctx.fillStyle = '#556677';
+            ctx.fillRect(i * sq, j * sq, sq, sq);
+        }
+    }
+}
+const checkerTexture = new THREE.CanvasTexture(canvas);
+checkerTexture.wrapS = THREE.RepeatWrapping;
+checkerTexture.wrapT = THREE.RepeatWrapping;
+checkerTexture.repeat.set(4, 4);
+
 const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(20, 20),
-    new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.8, metalness: 0.2 })
+    new THREE.MeshStandardMaterial({ map: checkerTexture, roughness: 0.8, metalness: 0.1 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.01;
 ground.receiveShadow = true;
 scene.add(ground);
-const gridHelper = new THREE.GridHelper(20, 20, 0x336699, 0x224466);
+
+const gridHelper = new THREE.GridHelper(20, 20, 0x88aacc, 0x446677);
 scene.add(gridHelper);
 
-// ---------- CÁMARAS ESTÉREO ----------
-let eyeSep = 0.064;           // separación interocular por defecto
-let currentAnaglyphMode = 'positive'; // 'positive' o 'negative'
+// ---------- CÁMARAS ESTÉREO Y RENDER TARGETS ----------
+let eyeSep = 0.064;
 
-// Cámaras izquierda y derecha (clonadas de la base y desplazadas)
-const cameraLeft = camera.clone();
+const cameraLeft  = camera.clone();
 const cameraRight = camera.clone();
 
-// Render targets para izquierda y derecha
-const rtWidth = window.innerWidth;
-const rtHeight = window.innerHeight;
-const rtLeft = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
-const rtRight = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
+const rtLeft  = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+    colorSpace: THREE.SRGBColorSpace
+});
+const rtRight = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+    colorSpace: THREE.SRGBColorSpace
+});
 
-// Shader de composición final (anaglifo configurable)
+// ---------- SHADER ANAGLIFO CON 3 MODOS ----------
+// mode 0 → Color    (canales RGB directos — máximo color)
+// mode 1 → Grises   (luminancia BT.601  — mejor efecto 3D)
+// mode 2 → Negativo (grises con ojos invertidos)
 const anaglyphShader = {
     uniforms: {
-        tDiffuseLeft: { value: rtLeft.texture },
+        tDiffuseLeft:  { value: rtLeft.texture  },
         tDiffuseRight: { value: rtRight.texture },
-        mode: { value: 0 }       // 0 = positive (rojo izq, cian der), 1 = negative (cian izq, rojo der)
+        mode:          { value: 0 }
     },
     vertexShader: /* glsl */ `
         varying vec2 vUv;
@@ -101,36 +132,44 @@ const anaglyphShader = {
         uniform sampler2D tDiffuseLeft;
         uniform sampler2D tDiffuseRight;
         uniform int mode;
+
+        // Pesos perceptuales ITU-R BT.601
+        const vec3 luma = vec3(0.299, 0.587, 0.114);
+
         void main() {
-            vec4 leftColor = texture2D(tDiffuseLeft, vUv);
-            vec4 rightColor = texture2D(tDiffuseRight, vUv);
-            float r, g, b;
+            vec4 left  = texture2D(tDiffuseLeft,  vUv);
+            vec4 right = texture2D(tDiffuseRight, vUv);
+
             if (mode == 0) {
-                // Positivo: izquierda -> rojo, derecha -> cian
-                r = leftColor.r;
-                g = rightColor.g;
-                b = rightColor.b;
+                // COLOR: conserva canales RGB originales de cada ojo
+                // Ojo izquierdo → rojo | Ojo derecho → cian (verde + azul)
+                gl_FragColor = vec4(left.r, right.g, right.b, 1.0);
+
+            } else if (mode == 1) {
+                // GRISES: luminancia ponderada, mejor profundidad 3D
+                float lumL = dot(left.rgb,  luma);
+                float lumR = dot(right.rgb, luma);
+                gl_FragColor = vec4(lumL, lumR, lumR, 1.0);
+
             } else {
-                // Negativo: izquierda -> cian, derecha -> rojo
-                r = rightColor.r;
-                g = leftColor.g;
-                b = leftColor.b;
+                // NEGATIVO EN GRISES: ojos invertidos
+                float lumL = dot(left.rgb,  luma);
+                float lumR = dot(right.rgb, luma);
+                gl_FragColor = vec4(lumR, lumL, lumL, 1.0);
             }
-            gl_FragColor = vec4(r, g, b, 1.0);
         }
     `
 };
 
-// Escena y cámara para el plano que combina las texturas
-const quadScene = new THREE.Scene();
+const quadScene  = new THREE.Scene();
 const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const quadMesh = new THREE.Mesh(
+const quadMesh   = new THREE.Mesh(
     new THREE.PlaneGeometry(2, 2),
     new THREE.ShaderMaterial(anaglyphShader)
 );
 quadScene.add(quadMesh);
 
-// ---------- MODELOS FBX ----------
+// ---------- CARGA DE MODELOS ----------
 const loader = new FBXLoader();
 const modelsCache = {};
 let currentModel = null;
@@ -154,14 +193,18 @@ function loadAllModels() {
             fbx.scale.set(0.01, 0.01, 0.01);
             fbx.position.set(0, 0, 0);
             const mixer = new THREE.AnimationMixer(fbx);
-            if (fbx.animations && fbx.animations.length > 0) {
+            if (fbx.animations && fbx.animations.length) {
                 fbx.animations.forEach(clip => mixer.clipAction(clip).play());
             }
             fbx.visible = false;
             scene.add(fbx);
             modelsCache[filename] = { model: fbx, mixer };
+            console.log(`✔ ${filename} cargado`);
             resolve();
-        }, undefined, error => { console.error(error); reject(error); });
+        }, undefined, error => {
+            console.error(`✘ Error cargando ${filename}:`, error);
+            reject(error);
+        });
     }));
     return Promise.all(loadPromises);
 }
@@ -172,15 +215,18 @@ function switchModel(filename) {
         if (currentMixer) currentMixer.time = 0;
     }
     const entry = modelsCache[filename];
-    if (!entry) return;
+    if (!entry) {
+        console.warn(`Modelo ${filename} no encontrado`);
+        return;
+    }
     entry.model.visible = true;
     currentModel = entry.model;
     currentMixer = entry.mixer;
 
     guiSettings.scale = currentModel.scale.x;
-    guiSettings.posX = currentModel.position.x;
-    guiSettings.posY = currentModel.position.y;
-    guiSettings.posZ = currentModel.position.z;
+    guiSettings.posX  = currentModel.position.x;
+    guiSettings.posY  = currentModel.position.y;
+    guiSettings.posZ  = currentModel.position.z;
     updateAllGUIControllers();
 
     const box = new THREE.Box3().setFromObject(entry.model);
@@ -190,46 +236,84 @@ function switchModel(filename) {
 
 // ---------- GUI ----------
 const guiSettings = {
-    anaglifo: true,
-    eyeSeparation: eyeSep,
-    animSpeed: 1.0,
-    scale: 0.01,
-    posX: 0,
-    posY: 0,
-    posZ: 0,
-    mode: 'Positivo'   // 'Positivo' o 'Negativo'
+    anaglifo:         true,
+    eyeSeparation:    eyeSep,
+    modoAnaglifo:    'Color',   // Color | Grises | Negativo
+    animSpeed:        1.0,
+    scale:            0.01,
+    posX:             0,
+    posY:             0,
+    posZ:             0,
+    ambientIntensity: ambientLight.intensity,
+    exposure:         1.0
 };
+
+// Mapa etiqueta → valor de uniform
+const modeMap = { 'Color': 0, 'Grises': 1, 'Negativo': 2 };
 
 const gui = new GUI({ title: 'Controles', width: 300 });
 gui.close();
 
 gui.add(guiSettings, 'anaglifo').name('Activar Anaglifo');
-const anaglyphFolder = gui.addFolder('Estéreo');
-anaglyphFolder.add(guiSettings, 'eyeSeparation', 0, 1, 0.001).name('Separación ocular').onChange(val => {
-    eyeSep = val;
-});
-anaglyphFolder.add(guiSettings, 'mode', ['Positivo', 'Negativo']).name('Modo').onChange(val => {
-    currentAnaglyphMode = val === 'Positivo' ? 'positive' : 'negative';
-    quadMesh.material.uniforms.mode.value = currentAnaglyphMode === 'positive' ? 0 : 1;
-});
+
+const stereoFolder = gui.addFolder('Estéreo');
+stereoFolder
+    .add(guiSettings, 'eyeSeparation', 0, 1, 0.001)
+    .name('Separación ocular')
+    .onChange(v => eyeSep = v);
+
+// Control para que el usuario elija el modo anaglifo
+stereoFolder
+    .add(guiSettings, 'modoAnaglifo', ['Color', 'Grises', 'Negativo'])
+    .name('Modo anaglifo')
+    .onChange(val => {
+        quadMesh.material.uniforms.mode.value = modeMap[val];
+    });
+
+const lightFolder = gui.addFolder('Iluminación / Brillo');
+lightFolder
+    .add(guiSettings, 'ambientIntensity', 0, 5, 0.1)
+    .name('Brillo ambiental')
+    .onChange(v => ambientLight.intensity = v);
+lightFolder
+    .add(guiSettings, 'exposure', 0.1, 3, 0.1)
+    .name('Exposición (modo normal)')
+    .onChange(v => renderer.toneMappingExposure = v);
 
 const modelFolder = gui.addFolder('Modelo');
-modelFolder.add(guiSettings, 'scale', 0.001, 0.1, 0.001).name('Escala').onChange(val => {
-    if (currentModel) currentModel.scale.set(val, val, val);
-});
-modelFolder.add(guiSettings, 'posX', -5, 5, 0.01).name('Pos X').onChange(val => { if (currentModel) currentModel.position.x = val; });
-modelFolder.add(guiSettings, 'posY', -5, 5, 0.01).name('Pos Y').onChange(val => { if (currentModel) currentModel.position.y = val; });
-modelFolder.add(guiSettings, 'posZ', -5, 5, 0.01).name('Pos Z').onChange(val => { if (currentModel) currentModel.position.z = val; });
-modelFolder.add({ reset: () => {
-    if (currentModel) {
-        currentModel.scale.set(0.01, 0.01, 0.01);
-        currentModel.position.set(0, 0, 0);
-        guiSettings.scale = 0.01; guiSettings.posX = 0; guiSettings.posY = 0; guiSettings.posZ = 0;
-        updateAllGUIControllers();
-    }
-} }, 'reset').name('Reiniciar');
+modelFolder
+    .add(guiSettings, 'scale', 0.001, 0.1, 0.001)
+    .name('Escala')
+    .onChange(v => { if (currentModel) currentModel.scale.set(v, v, v); });
+modelFolder
+    .add(guiSettings, 'posX', -5, 5, 0.01)
+    .name('Pos X')
+    .onChange(v => { if (currentModel) currentModel.position.x = v; });
+modelFolder
+    .add(guiSettings, 'posY', -5, 5, 0.01)
+    .name('Pos Y')
+    .onChange(v => { if (currentModel) currentModel.position.y = v; });
+modelFolder
+    .add(guiSettings, 'posZ', -5, 5, 0.01)
+    .name('Pos Z')
+    .onChange(v => { if (currentModel) currentModel.position.z = v; });
+modelFolder
+    .add({ reset: () => {
+        if (currentModel) {
+            currentModel.scale.set(0.01, 0.01, 0.01);
+            currentModel.position.set(0, 0, 0);
+            guiSettings.scale = 0.01;
+            guiSettings.posX  = 0;
+            guiSettings.posY  = 0;
+            guiSettings.posZ  = 0;
+            updateAllGUIControllers();
+        }
+    }}, 'reset')
+    .name('Reiniciar pos/esc');
 
-gui.add(guiSettings, 'animSpeed', 0, 2, 0.01).name('Velocidad anim.').onChange(val => currentAnimationSpeed = val);
+gui.add(guiSettings, 'animSpeed', 0, 2, 0.01)
+    .name('Velocidad anim.')
+    .onChange(v => currentAnimationSpeed = v);
 
 function updateAllGUIControllers() {
     gui.controllersRecursive().forEach(c => c.updateDisplay());
@@ -244,26 +328,32 @@ function animate() {
     controls.update();
 
     if (guiSettings.anaglifo) {
-        // Calcular desplazamiento lateral basado en eyeSep y orientación de la cámara
-        const rightOffset = camera.getWorldDirection(new THREE.Vector3())
-            .cross(camera.up)
-            .normalize()
-            .multiplyScalar(eyeSep / 2);
-        
-        cameraLeft.copy(camera).position.add(rightOffset);
-        cameraRight.copy(camera).position.sub(rightOffset);
+        // Cámaras con convergencia correcta hacia el target (toe-in)
+        const worldDir = new THREE.Vector3();
+        camera.getWorldDirection(worldDir);
 
-        // Renderizar vistas izquierda y derecha
+        const rightDir = new THREE.Vector3()
+            .crossVectors(worldDir, camera.up)
+            .normalize();
+
+        cameraLeft.copy(camera);
+        cameraLeft.position.addScaledVector(rightDir, -eyeSep / 2);
+        cameraLeft.lookAt(controls.target);
+
+        cameraRight.copy(camera);
+        cameraRight.position.addScaledVector(rightDir, eyeSep / 2);
+        cameraRight.lookAt(controls.target);
+
         renderer.setRenderTarget(rtLeft);
         renderer.render(scene, cameraLeft);
+
         renderer.setRenderTarget(rtRight);
         renderer.render(scene, cameraRight);
 
-        // Renderizar composición final al canvas
         renderer.setRenderTarget(null);
         renderer.render(quadScene, quadCamera);
+
     } else {
-        // Render normal
         renderer.render(scene, camera);
     }
 }
@@ -279,15 +369,18 @@ window.addEventListener('resize', () => {
 
 // ---------- INICIO ----------
 const selectElement = document.getElementById('model-select');
-selectElement.addEventListener('change', (e) => switchModel(e.target.value));
+selectElement.addEventListener('change', e => switchModel(e.target.value));
 
-// Inicializar el uniform de modo
-quadMesh.material.uniforms.mode.value = 0; // positivo por defecto
+// Iniciar en modo Color
+quadMesh.material.uniforms.mode.value = 0;
 
-loadAllModels().then(() => {
-    console.log('✅ Modelos cargados');
-    switchModel(selectElement.value);
-    animate();
-}).catch(err => {
-    console.error('❌ Error:', err);
-});
+loadAllModels()
+    .then(() => {
+        console.log('✅ Todos los modelos listos');
+        switchModel(selectElement.value);
+        animate();
+    })
+    .catch(err => {
+        console.error('❌ Fallo en carga de modelos:', err);
+        animate();
+    });
