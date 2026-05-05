@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { AnaglyphEffect } from 'three/addons/effects/AnaglyphEffect.js';
+import { GUI } from 'lil-gui';
 
 // ---------- CONFIGURACIÓN ----------
 const MODEL_FILES = [
@@ -11,20 +11,15 @@ const MODEL_FILES = [
     'Standard Run.fbx',
     'Thriller Part 3.fbx'
 ];
-
 const MODELS_PATH = 'models/';
 
-// ---------- ESCENA, CÁMARA, RENDERER ----------
+// ---------- ESCENA, CÁMARA BASE ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111122); // fondo oscuro azulado
+scene.background = new THREE.Color(0x111122);
 scene.fog = new THREE.Fog(0x111122, 10, 50);
 
-const camera = new THREE.PerspectiveCamera(
-    45,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    100
-);
+// Cámara base (centro) – se usa para los controles, pero renderizaremos con dos cámaras desplazadas
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(5, 3, 8);
 camera.lookAt(0, 1, 0);
 
@@ -35,11 +30,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-// Efecto Anaglifo (rojo/cian)
-const effect = new AnaglyphEffect(renderer);
-effect.setSize(window.innerWidth, window.innerHeight);
-
-// Controles de órbita (sobre la cámara principal)
+// Controles de órbita (actúan sobre la cámara base)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1, 0);
 controls.enableDamping = true;
@@ -47,11 +38,8 @@ controls.dampingFactor = 0.05;
 controls.update();
 
 // ---------- ILUMINACIÓN ----------
-// Luz ambiente suave
 const ambientLight = new THREE.AmbientLight(0x404066);
 scene.add(ambientLight);
-
-// Luz principal direccional con sombras
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
 dirLight.position.set(10, 15, 5);
 dirLight.castShadow = true;
@@ -64,173 +52,242 @@ dirLight.shadow.camera.right = 10;
 dirLight.shadow.camera.top = 10;
 dirLight.shadow.camera.bottom = -10;
 scene.add(dirLight);
-
-// Luz de relleno (atrás)
 const backLight = new THREE.PointLight(0x4466ff, 1, 20);
 backLight.position.set(-5, 2, -5);
 scene.add(backLight);
 
-// ---------- SUELO (para referencia de profundidad) ----------
-const groundGeometry = new THREE.PlaneGeometry(20, 20);
-const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0x223344,
-    roughness: 0.8,
-    metalness: 0.2,
-});
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+// Suelo
+const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.8, metalness: 0.2 })
+);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.01;
 ground.receiveShadow = true;
 scene.add(ground);
-
-// Rejilla decorativa
 const gridHelper = new THREE.GridHelper(20, 20, 0x336699, 0x224466);
-gridHelper.position.y = 0;
 scene.add(gridHelper);
 
-// ---------- CARGA DE MODELOS FBX ----------
+// ---------- CÁMARAS ESTÉREO ----------
+let eyeSep = 0.064;           // separación interocular por defecto
+let currentAnaglyphMode = 'positive'; // 'positive' o 'negative'
+
+// Cámaras izquierda y derecha (clonadas de la base y desplazadas)
+const cameraLeft = camera.clone();
+const cameraRight = camera.clone();
+
+// Render targets para izquierda y derecha
+const rtWidth = window.innerWidth;
+const rtHeight = window.innerHeight;
+const rtLeft = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
+const rtRight = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
+
+// Shader de composición final (anaglifo configurable)
+const anaglyphShader = {
+    uniforms: {
+        tDiffuseLeft: { value: rtLeft.texture },
+        tDiffuseRight: { value: rtRight.texture },
+        mode: { value: 0 }       // 0 = positive (rojo izq, cian der), 1 = negative (cian izq, rojo der)
+    },
+    vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: /* glsl */ `
+        varying vec2 vUv;
+        uniform sampler2D tDiffuseLeft;
+        uniform sampler2D tDiffuseRight;
+        uniform int mode;
+        void main() {
+            vec4 leftColor = texture2D(tDiffuseLeft, vUv);
+            vec4 rightColor = texture2D(tDiffuseRight, vUv);
+            float r, g, b;
+            if (mode == 0) {
+                // Positivo: izquierda -> rojo, derecha -> cian
+                r = leftColor.r;
+                g = rightColor.g;
+                b = rightColor.b;
+            } else {
+                // Negativo: izquierda -> cian, derecha -> rojo
+                r = rightColor.r;
+                g = leftColor.g;
+                b = leftColor.b;
+            }
+            gl_FragColor = vec4(r, g, b, 1.0);
+        }
+    `
+};
+
+// Escena y cámara para el plano que combina las texturas
+const quadScene = new THREE.Scene();
+const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const quadMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2, 2),
+    new THREE.ShaderMaterial(anaglyphShader)
+);
+quadScene.add(quadMesh);
+
+// ---------- MODELOS FBX ----------
 const loader = new FBXLoader();
-const modelsCache = {};          // clave: nombre de archivo, valor: { model, mixer, animations }
-let currentModel = null;        // referencia al grupo activo
-let currentMixer = null;        // mixer activo
+const modelsCache = {};
+let currentModel = null;
+let currentMixer = null;
+let currentAnimationSpeed = 1.0;
 const clock = new THREE.Clock();
 
-// Función para cargar todos los modelos y guardarlos ocultos
 function loadAllModels() {
-    const loadPromises = MODEL_FILES.map((filename) => {
-        return new Promise((resolve, reject) => {
-            loader.load(
-                MODELS_PATH + filename,
-                (fbx) => {
-                    // Preparar el modelo
-                    fbx.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                            // Mejorar materiales para que se vean bien con poca luz
-                            if (child.material) {
-                                child.material.roughness = 0.6;
-                                child.material.metalness = 0.1;
-                            }
-                        }
-                    });
-
-                    // Ajustar escala y posición (los modelos de Mixamo suelen ser grandes)
-                    fbx.scale.set(0.01, 0.01, 0.01);
-                    fbx.position.set(0, 0, 0);
-
-                    // Animaciones
-                    const mixer = new THREE.AnimationMixer(fbx);
-                    if (fbx.animations && fbx.animations.length > 0) {
-                        fbx.animations.forEach((clip) => {
-                            mixer.clipAction(clip).play();
-                        });
+    const loadPromises = MODEL_FILES.map(filename => new Promise((resolve, reject) => {
+        loader.load(MODELS_PATH + filename, (fbx) => {
+            fbx.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    if (child.material) {
+                        child.material.roughness = 0.6;
+                        child.material.metalness = 0.1;
                     }
-
-                    // Ocultar por defecto
-                    fbx.visible = false;
-                    scene.add(fbx);
-
-                    modelsCache[filename] = {
-                        model: fbx,
-                        mixer: mixer,
-                        animations: fbx.animations,
-                    };
-
-                    resolve();
-                },
-                undefined,
-                (error) => {
-                    console.error(`Error cargando ${filename}:`, error);
-                    reject(error);
                 }
-            );
-        });
-    });
-
+            });
+            fbx.scale.set(0.01, 0.01, 0.01);
+            fbx.position.set(0, 0, 0);
+            const mixer = new THREE.AnimationMixer(fbx);
+            if (fbx.animations && fbx.animations.length > 0) {
+                fbx.animations.forEach(clip => mixer.clipAction(clip).play());
+            }
+            fbx.visible = false;
+            scene.add(fbx);
+            modelsCache[filename] = { model: fbx, mixer };
+            resolve();
+        }, undefined, error => { console.error(error); reject(error); });
+    }));
     return Promise.all(loadPromises);
 }
 
-// Cambiar el modelo visible según selección
 function switchModel(filename) {
-    // Ocultar modelo anterior
     if (currentModel) {
         currentModel.visible = false;
-        // No detenemos el mixer anterior, se pausa al ocultar
-        if (currentMixer) {
-            currentMixer.time = 0; // reiniciar la animación
-        }
+        if (currentMixer) currentMixer.time = 0;
     }
-
     const entry = modelsCache[filename];
     if (!entry) return;
-
-    // Mostrar nuevo modelo
     entry.model.visible = true;
     currentModel = entry.model;
     currentMixer = entry.mixer;
 
-    // Ajustar cámara para que encuadre el nuevo modelo (opcional)
+    guiSettings.scale = currentModel.scale.x;
+    guiSettings.posX = currentModel.position.x;
+    guiSettings.posY = currentModel.position.y;
+    guiSettings.posZ = currentModel.position.z;
+    updateAllGUIControllers();
+
     const box = new THREE.Box3().setFromObject(entry.model);
-    const center = box.getCenter(new THREE.Vector3());
-    controls.target.copy(center);
+    controls.target.copy(box.getCenter(new THREE.Vector3()));
     controls.update();
 }
 
-// ---------- INTERFAZ DE USUARIO ----------
-const selectElement = document.getElementById('model-select');
-selectElement.addEventListener('change', (event) => {
-    switchModel(event.target.value);
+// ---------- GUI ----------
+const guiSettings = {
+    anaglifo: true,
+    eyeSeparation: eyeSep,
+    animSpeed: 1.0,
+    scale: 0.01,
+    posX: 0,
+    posY: 0,
+    posZ: 0,
+    mode: 'Positivo'   // 'Positivo' o 'Negativo'
+};
+
+const gui = new GUI({ title: 'Controles', width: 300 });
+gui.close();
+
+gui.add(guiSettings, 'anaglifo').name('Activar Anaglifo');
+const anaglyphFolder = gui.addFolder('Estéreo');
+anaglyphFolder.add(guiSettings, 'eyeSeparation', 0, 1, 0.001).name('Separación ocular').onChange(val => {
+    eyeSep = val;
 });
+anaglyphFolder.add(guiSettings, 'mode', ['Positivo', 'Negativo']).name('Modo').onChange(val => {
+    currentAnaglyphMode = val === 'Positivo' ? 'positive' : 'negative';
+    quadMesh.material.uniforms.mode.value = currentAnaglyphMode === 'positive' ? 0 : 1;
+});
+
+const modelFolder = gui.addFolder('Modelo');
+modelFolder.add(guiSettings, 'scale', 0.001, 0.1, 0.001).name('Escala').onChange(val => {
+    if (currentModel) currentModel.scale.set(val, val, val);
+});
+modelFolder.add(guiSettings, 'posX', -5, 5, 0.01).name('Pos X').onChange(val => { if (currentModel) currentModel.position.x = val; });
+modelFolder.add(guiSettings, 'posY', -5, 5, 0.01).name('Pos Y').onChange(val => { if (currentModel) currentModel.position.y = val; });
+modelFolder.add(guiSettings, 'posZ', -5, 5, 0.01).name('Pos Z').onChange(val => { if (currentModel) currentModel.position.z = val; });
+modelFolder.add({ reset: () => {
+    if (currentModel) {
+        currentModel.scale.set(0.01, 0.01, 0.01);
+        currentModel.position.set(0, 0, 0);
+        guiSettings.scale = 0.01; guiSettings.posX = 0; guiSettings.posY = 0; guiSettings.posZ = 0;
+        updateAllGUIControllers();
+    }
+} }, 'reset').name('Reiniciar');
+
+gui.add(guiSettings, 'animSpeed', 0, 2, 0.01).name('Velocidad anim.').onChange(val => currentAnimationSpeed = val);
+
+function updateAllGUIControllers() {
+    gui.controllersRecursive().forEach(c => c.updateDisplay());
+}
 
 // ---------- BUCLE DE ANIMACIÓN ----------
 function animate() {
     requestAnimationFrame(animate);
 
-    const delta = clock.getDelta();
-
-    // Actualizar mixer del modelo activo
-    if (currentMixer) {
-        currentMixer.update(delta);
-    }
-
-    // Actualizar controles
+    const delta = clock.getDelta() * currentAnimationSpeed;
+    if (currentMixer) currentMixer.update(delta);
     controls.update();
 
-    // Renderizar con efecto anaglifo
-    effect.render(scene, camera);
+    if (guiSettings.anaglifo) {
+        // Calcular desplazamiento lateral basado en eyeSep y orientación de la cámara
+        const rightOffset = camera.getWorldDirection(new THREE.Vector3())
+            .cross(camera.up)
+            .normalize()
+            .multiplyScalar(eyeSep / 2);
+        
+        cameraLeft.copy(camera).position.add(rightOffset);
+        cameraRight.copy(camera).position.sub(rightOffset);
+
+        // Renderizar vistas izquierda y derecha
+        renderer.setRenderTarget(rtLeft);
+        renderer.render(scene, cameraLeft);
+        renderer.setRenderTarget(rtRight);
+        renderer.render(scene, cameraRight);
+
+        // Renderizar composición final al canvas
+        renderer.setRenderTarget(null);
+        renderer.render(quadScene, quadCamera);
+    } else {
+        // Render normal
+        renderer.render(scene, camera);
+    }
 }
 
-// ---------- REDIMENSIONAR VENTANA ----------
-window.addEventListener('resize', onWindowResize, false);
-function onWindowResize() {
+// ---------- AJUSTE DE TAMAÑO ----------
+window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    effect.setSize(window.innerWidth, window.innerHeight);
-}
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    rtLeft.setSize(window.innerWidth, window.innerHeight);
+    rtRight.setSize(window.innerWidth, window.innerHeight);
+});
 
 // ---------- INICIO ----------
-loadAllModels()
-    .then(() => {
-        console.log('✅ Todos los modelos cargados');
-        // Seleccionar el modelo por defecto
-        const defaultModel = selectElement.value;
-        if (modelsCache[defaultModel]) {
-            switchModel(defaultModel);
-        }
-        // Iniciar bucle
-        animate();
-    })
-    .catch((error) => {
-        console.error('❌ Error al cargar los modelos:', error);
-        // Mostrar mensaje en pantalla
-        const errorMsg = document.createElement('div');
-        errorMsg.style.position = 'absolute';
-        errorMsg.style.top = '50%';
-        errorMsg.style.left = '50%';
-        errorMsg.style.transform = 'translate(-50%, -50%)';
-        errorMsg.style.color = 'red';
-        errorMsg.style.fontSize = '20px';
-        errorMsg.textContent = 'Error al cargar los modelos. Revisa la ruta.';
-        document.body.appendChild(errorMsg);
-    });
+const selectElement = document.getElementById('model-select');
+selectElement.addEventListener('change', (e) => switchModel(e.target.value));
+
+// Inicializar el uniform de modo
+quadMesh.material.uniforms.mode.value = 0; // positivo por defecto
+
+loadAllModels().then(() => {
+    console.log('✅ Modelos cargados');
+    switchModel(selectElement.value);
+    animate();
+}).catch(err => {
+    console.error('❌ Error:', err);
+});
