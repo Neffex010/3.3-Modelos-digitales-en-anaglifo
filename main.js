@@ -1,315 +1,236 @@
-/**
- * main.js — Visor 3D Anaglifo (Versión Profesional Definitiva)
- */
-
 import * as THREE from 'three';
-import { FBXLoader }       from 'three/addons/loaders/FBXLoader.js';
-import { AnaglyphEffect }  from 'three/addons/effects/AnaglyphEffect.js';
-import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
-import { GUI }             from 'three/addons/libs/lil-gui.module.min.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { AnaglyphEffect } from 'three/addons/effects/AnaglyphEffect.js';
 
-// ─── Estado global ────────────────────────────────────────────────────────────
-let camera, scene, renderer, effect, controls, mixer;
-let grid, ambientLight, modeloCargado, guiGlobal;
-let animacionPausada = false;
-
-const clock = new THREE.Clock(); 
-
-// Posición y target iniciales de la cámara (para el reset)
-const CAMERA_INIT = { 
-    pos: new THREE.Vector3(0, 3, 10), 
-    target: new THREE.Vector3(0, 3, 0),
-    fov: 60
-};
-
-// ─── Modelos disponibles (Asegúrate de que existan en la carpeta /models/) ───
-const MODELOS = [
+// ---------- CONFIGURACIÓN ----------
+const MODEL_FILES = [
     'Capoeira.fbx',
-    'Standard Run.fbx',
+    'Flying Knee Punch Combo.fbx',
     'Jump Attack.fbx',
-    'Thriller Part 3.fbx',
-    'Flying Knee Punch Combo.fbx'
+    'Standard Run.fbx',
+    'Thriller Part 3.fbx'
 ];
 
-// ─── Valores por Defecto (Para el botón de Reset) ────────────────────────────
-const PARAMETROS_DEFAULT = {
-    modelo:            'Capoeira.fbx',
-    // Efecto 3D
-    profundidad3D:     10,    // 10 = Neutro
-    separacionFija:    0.064, // Separación base ocular
-    // Cámara
-    fov:               60,
-    zoomVisual:        1,
-    alturaCamara:      3,
-    // Entorno
-    escalaModelo:      0.05,
-    colorFondo:        '#555555',
-    brillo:            2.5,
-    verRejilla:        true
-};
+const MODELS_PATH = 'models/';
 
-// Objeto reactivo que la GUI modificará
-const parametros = JSON.parse(JSON.stringify(PARAMETROS_DEFAULT));
+// ---------- ESCENA, CÁMARA, RENDERER ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111122); // fondo oscuro azulado
+scene.fog = new THREE.Fog(0x111122, 10, 50);
 
-// ─── Inicialización ────────────────────────────────────────────────────────────
-init();
+const camera = new THREE.PerspectiveCamera(
+    45,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+);
+camera.position.set(5, 3, 8);
+camera.lookAt(0, 1, 0);
 
-function init() {
-    const container = document.getElementById('container');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
 
-    if ('ontouchstart' in window) {
-        document.getElementById('instructions-text').textContent =
-            'Ponte tus lentes Rojo/Cián · Arrastra para rotar · Pellizca para zoom';
-    }
+// Efecto Anaglifo (rojo/cian)
+const effect = new AnaglyphEffect(renderer);
+effect.setSize(window.innerWidth, window.innerHeight);
 
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(parametros.colorFondo);
-    scene.fog = new THREE.Fog(parametros.colorFondo, 10, 80);
+// Controles de órbita (sobre la cámara principal)
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.update();
 
-    camera = new THREE.PerspectiveCamera(parametros.fov, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.position.copy(CAMERA_INIT.pos);
+// ---------- ILUMINACIÓN ----------
+// Luz ambiente suave
+const ambientLight = new THREE.AmbientLight(0x404066);
+scene.add(ambientLight);
 
-    ambientLight = new THREE.AmbientLight(0xffffff, parametros.brillo);
-    scene.add(ambientLight);
+// Luz principal direccional con sombras
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(10, 15, 5);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 1024;
+dirLight.shadow.mapSize.height = 1024;
+dirLight.shadow.camera.near = 0.5;
+dirLight.shadow.camera.far = 50;
+dirLight.shadow.camera.left = -10;
+dirLight.shadow.camera.right = 10;
+dirLight.shadow.camera.top = 10;
+dirLight.shadow.camera.bottom = -10;
+scene.add(dirLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 3);
-    hemiLight.position.set(0, 10, 0);
-    scene.add(hemiLight);
+// Luz de relleno (atrás)
+const backLight = new THREE.PointLight(0x4466ff, 1, 20);
+backLight.position.set(-5, 2, -5);
+scene.add(backLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 4);
-    dirLight.position.set(0, 10, 5);
-    scene.add(dirLight);
+// ---------- SUELO (para referencia de profundidad) ----------
+const groundGeometry = new THREE.PlaneGeometry(20, 20);
+const groundMaterial = new THREE.MeshStandardMaterial({
+    color: 0x223344,
+    roughness: 0.8,
+    metalness: 0.2,
+});
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.01;
+ground.receiveShadow = true;
+scene.add(ground);
 
-    grid = new THREE.GridHelper(50, 20, 0xffffff, 0xffffff);
-    grid.material.opacity = 0.15;
-    grid.material.transparent = true;
-    grid.visible = parametros.verRejilla;
-    scene.add(grid);
+// Rejilla decorativa
+const gridHelper = new THREE.GridHelper(20, 20, 0x336699, 0x224466);
+gridHelper.position.y = 0;
+scene.add(gridHelper);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    container.appendChild(renderer.domElement);
+// ---------- CARGA DE MODELOS FBX ----------
+const loader = new FBXLoader();
+const modelsCache = {};          // clave: nombre de archivo, valor: { model, mixer, animations }
+let currentModel = null;        // referencia al grupo activo
+let currentMixer = null;        // mixer activo
+const clock = new THREE.Clock();
 
-    effect = new AnaglyphEffect(renderer);
-    effect.setSize(window.innerWidth, window.innerHeight);
+// Función para cargar todos los modelos y guardarlos ocultos
+function loadAllModels() {
+    const loadPromises = MODEL_FILES.map((filename) => {
+        return new Promise((resolve, reject) => {
+            loader.load(
+                MODELS_PATH + filename,
+                (fbx) => {
+                    // Preparar el modelo
+                    fbx.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            // Mejorar materiales para que se vean bien con poca luz
+                            if (child.material) {
+                                child.material.roughness = 0.6;
+                                child.material.metalness = 0.1;
+                            }
+                        }
+                    });
 
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.copy(CAMERA_INIT.target);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.05;
+                    // Ajustar escala y posición (los modelos de Mixamo suelen ser grandes)
+                    fbx.scale.set(0.01, 0.01, 0.01);
+                    fbx.position.set(0, 0, 0);
 
-    cargarModelo();
-    setupGUI();
+                    // Animaciones
+                    const mixer = new THREE.AnimationMixer(fbx);
+                    if (fbx.animations && fbx.animations.length > 0) {
+                        fbx.animations.forEach((clip) => {
+                            mixer.clipAction(clip).play();
+                        });
+                    }
 
-    window.addEventListener('resize', onWindowResize);
-    window.addEventListener('keydown', onKeyDown);
+                    // Ocultar por defecto
+                    fbx.visible = false;
+                    scene.add(fbx);
 
-    document.getElementById('btn-retry').addEventListener('click', () => {
-        document.getElementById('error-overlay').hidden = true;
-        cargarModelo();
+                    modelsCache[filename] = {
+                        model: fbx,
+                        mixer: mixer,
+                        animations: fbx.animations,
+                    };
+
+                    resolve();
+                },
+                undefined,
+                (error) => {
+                    console.error(`Error cargando ${filename}:`, error);
+                    reject(error);
+                }
+            );
+        });
     });
 
-    renderer.setAnimationLoop(animate);
+    return Promise.all(loadPromises);
 }
 
-// ─── Carga del modelo ──────────────────────────────────────────────────────────
-function cargarModelo() {
-    const overlay    = document.getElementById('loading-overlay');
-    const barFill    = document.getElementById('loader-bar');
-    const barPercent = document.getElementById('loader-percent');
-
-    overlay.classList.remove('oculto');
-
-    const loader = new FBXLoader();
-
-    loader.load(
-        `models/${parametros.modelo}`,
-        function onLoad(object) {
-            if (object.animations && object.animations.length > 0) {
-                mixer = new THREE.AnimationMixer(object);
-                mixer.clipAction(object.animations[0]).play();
-            }
-
-            object.traverse(child => {
-                if (child.isMesh) {
-                    child.castShadow    = true;
-                    child.receiveShadow = true;
-                }
-            });
-
-            if (modeloCargado) {
-                scene.remove(modeloCargado);
-                modeloCargado.traverse(child => {
-                    if (child.isMesh) {
-                        child.geometry.dispose();
-                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-                        else child.material.dispose();
-                    }
-                });
-            }
-
-            modeloCargado = object;
-            modeloCargado.scale.setScalar(parametros.escalaModelo);
-            scene.add(modeloCargado);
-
-            overlay.classList.add('oculto');
-        },
-        function onProgress(xhr) {
-            if (xhr.lengthComputable) {
-                const pct = Math.round((xhr.loaded / xhr.total) * 100);
-                barFill.style.width    = pct + '%';
-                barPercent.textContent = pct + '%';
-            }
-        },
-        function onError(error) {
-            console.error('Error al cargar el modelo FBX:', error);
-            overlay.classList.add('oculto');
-            document.getElementById('error-message').textContent =
-                `No se pudo cargar "${parametros.modelo}". Verifica que el archivo exista en la carpeta /models/.`;
-            document.getElementById('error-overlay').hidden = false;
+// Cambiar el modelo visible según selección
+function switchModel(filename) {
+    // Ocultar modelo anterior
+    if (currentModel) {
+        currentModel.visible = false;
+        // No detenemos el mixer anterior, se pausa al ocultar
+        if (currentMixer) {
+            currentMixer.time = 0; // reiniciar la animación
         }
-    );
-}
+    }
 
-// ─── Actualizar Matriz de Cámara ───────────────────────────────────────────────
-function actualizarCamaraOptica() {
-    const direccion = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-    camera.position.copy(controls.target).addScaledVector(direccion, parametros.profundidad3D);
-    
-    camera.zoom = (parametros.profundidad3D / 10) * parametros.zoomVisual; 
-    
-    camera.position.y = parametros.alturaCamara;
-    controls.target.y = parametros.alturaCamara;
+    const entry = modelsCache[filename];
+    if (!entry) return;
 
-    camera.fov = parametros.fov;
-    camera.updateProjectionMatrix();
+    // Mostrar nuevo modelo
+    entry.model.visible = true;
+    currentModel = entry.model;
+    currentMixer = entry.mixer;
+
+    // Ajustar cámara para que encuadre el nuevo modelo (opcional)
+    const box = new THREE.Box3().setFromObject(entry.model);
+    const center = box.getCenter(new THREE.Vector3());
+    controls.target.copy(center);
     controls.update();
 }
 
-// ─── GUI de controles ──────────────────────────────────────────────────────────
-function cambiarModelo(nombre) {
-    parametros.modelo = nombre;
-    if (mixer) {
-        mixer.stopAllAction();
-        mixer = null;
+// ---------- INTERFAZ DE USUARIO ----------
+const selectElement = document.getElementById('model-select');
+selectElement.addEventListener('change', (event) => {
+    switchModel(event.target.value);
+});
+
+// ---------- BUCLE DE ANIMACIÓN ----------
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
+
+    // Actualizar mixer del modelo activo
+    if (currentMixer) {
+        currentMixer.update(delta);
     }
-    cargarModelo();
+
+    // Actualizar controles
+    controls.update();
+
+    // Renderizar con efecto anaglifo
+    effect.render(scene, camera);
 }
 
-function setupGUI() {
-    const guiModelos = new GUI({ title: '🎭 Modelos' });
-    guiModelos.domElement.style.position = 'absolute';
-    guiModelos.domElement.style.top      = '20px';
-    guiModelos.domElement.style.left     = '20px';
-    guiModelos.domElement.style.right    = 'auto';
-
-    MODELOS.forEach(nombre => {
-        const label = nombre.replace('.fbx', '');
-        guiModelos.add({ cargar: () => cambiarModelo(nombre) }, 'cargar').name(label);
-    });
-
-    guiGlobal = new GUI({ title: 'Ajustes del Escenario', width: 320 });
-
-    const folder3D = guiGlobal.addFolder('Efecto Anaglifo (Rojo/Cián)');
-    folder3D.add(parametros, 'profundidad3D', 4, 25, 0.5)
-        .name('Intensidad (Pop-Out)')
-        .onChange(actualizarCamaraOptica);
-    
-    // Al cambiar este valor, se aplica directamente en el loop animate()
-    folder3D.add(parametros, 'separacionFija', 0.0, 0.15, 0.001)
-        .name('Separación Ocular Fina');
-
-    const folderCamara = guiGlobal.addFolder('Controles de Cámara');
-    folderCamara.add(parametros, 'fov', 30, 120, 1)
-        .name('Campo de Visión (FOV)')
-        .onChange(actualizarCamaraOptica);
-    folderCamara.add(parametros, 'zoomVisual', 0.5, 3, 0.1)
-        .name('Zoom Lente')
-        .onChange(actualizarCamaraOptica);
-    folderCamara.add(parametros, 'alturaCamara', 0, 8, 0.1)
-        .name('Altura de Enfoque')
-        .onChange(actualizarCamaraOptica);
-
-    const folderEntorno = guiGlobal.addFolder('Entorno Visual');
-    folderEntorno.add(parametros, 'escalaModelo', 0.01, 0.15, 0.005)
-        .name('Tamaño del modelo')
-        .onChange(valor => {
-            if (modeloCargado) modeloCargado.scale.setScalar(valor);
-        });
-    folderEntorno.addColor(parametros, 'colorFondo')
-        .name('Color de fondo')
-        .onChange(color => {
-            scene.background.set(color);
-            scene.fog.color.set(color);
-        });
-    folderEntorno.add(parametros, 'brillo', 0, 5, 0.1)
-        .name('Luz ambiental')
-        .onChange(valor => {
-            ambientLight.intensity = valor;
-        });
-    folderEntorno.add(parametros, 'verRejilla')
-        .name('Mostrar piso')
-        .onChange(valor => {
-            grid.visible = valor;
-        });
-
-    guiGlobal.add({ reset: resetearTodo }, 'reset').name('🔄 Restaurar Ajustes por Defecto');
-    
-    folder3D.open();
-    folderCamara.close();
-}
-
-// ─── Reset General ─────────────────────────────────────────────────────────────
-function resetearTodo() {
-    Object.assign(parametros, PARAMETROS_DEFAULT);
-
-    scene.background.set(parametros.colorFondo);
-    scene.fog.color.set(parametros.colorFondo);
-    ambientLight.intensity = parametros.brillo;
-    grid.visible = parametros.verRejilla;
-    if (modeloCargado) modeloCargado.scale.setScalar(parametros.escalaModelo);
-
-    camera.position.copy(CAMERA_INIT.pos);
-    controls.target.copy(CAMERA_INIT.target);
-    actualizarCamaraOptica(); 
-
-    guiGlobal.controllersRecursive().forEach(controlador => {
-        controlador.updateDisplay();
-    });
-}
-
-// ─── Eventos de teclado ────────────────────────────────────────────────────────
-function onKeyDown(e) {
-    switch (e.code) {
-        case 'KeyR':
-            resetearTodo();
-            break;
-        case 'Space':
-            e.preventDefault();
-            animacionPausada = !animacionPausada;
-            if (!animacionPausada) clock.getDelta(); 
-            break;
-    }
-}
-
-// ─── Redimensionamiento ────────────────────────────────────────────────────────
+// ---------- REDIMENSIONAR VENTANA ----------
+window.addEventListener('resize', onWindowResize, false);
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     effect.setSize(window.innerWidth, window.innerHeight);
 }
 
-// ─── Loop de animación ─────────────────────────────────────────────────────────
-function animate() {
-    const delta = animacionPausada ? 0 : clock.getDelta();
-
-    if (mixer) mixer.update(delta);
-
-    controls.update(); 
-
-    // INYECCIÓN OBLIGATORIA: Fuerza a Three.js a usar nuestra separación en cada fotograma
-    const stereo = effect.stereo ?? effect._stereo;
-    if (stereo) stereo.eyeSep = parametros.separacionFija;
-
-    effect.render(scene, camera);
-}
+// ---------- INICIO ----------
+loadAllModels()
+    .then(() => {
+        console.log('✅ Todos los modelos cargados');
+        // Seleccionar el modelo por defecto
+        const defaultModel = selectElement.value;
+        if (modelsCache[defaultModel]) {
+            switchModel(defaultModel);
+        }
+        // Iniciar bucle
+        animate();
+    })
+    .catch((error) => {
+        console.error('❌ Error al cargar los modelos:', error);
+        // Mostrar mensaje en pantalla
+        const errorMsg = document.createElement('div');
+        errorMsg.style.position = 'absolute';
+        errorMsg.style.top = '50%';
+        errorMsg.style.left = '50%';
+        errorMsg.style.transform = 'translate(-50%, -50%)';
+        errorMsg.style.color = 'red';
+        errorMsg.style.fontSize = '20px';
+        errorMsg.textContent = 'Error al cargar los modelos. Revisa la ruta.';
+        document.body.appendChild(errorMsg);
+    });
