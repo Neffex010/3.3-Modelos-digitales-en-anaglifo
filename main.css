@@ -8,39 +8,261 @@ body {
     background: #000;
     overflow: hidden;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #ffffff;
 }
 
-#ui {
+/* --- Variables de Tema --- */
+:root {
+    --glass-bg: rgba(15, 23, 42, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --accent-color: #3b82f6;
+    --text-muted: #cbd5e1;
+}
+
+/* --- Título superior --- */
+.app-title {
     position: absolute;
-    top: 20px;
+    top: 25px;
     left: 20px;
     z-index: 10;
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 12px 20px;
+    pointer-events: none; /* Evita que bloquee clics en el canvas */
+}
+
+.app-title h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #ffffff, #60a5fa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* --- Panel Izquierdo flotante (Selector de Animación) --- */
+#ui {
+    position: absolute;
+    top: 80px; /* Misma altura exacta que el menú lil-gui */
+    left: 20px;
+    z-index: 10;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
     border-radius: 8px;
+    padding: 12px 20px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    backdrop-filter: blur(5px);
+    gap: 15px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
 }
 
 #ui label {
     font-weight: 500;
-    font-size: 16px;
+    font-size: 0.95rem;
+    color: var(--text-muted);
 }
 
 #model-select {
-    padding: 6px 12px;
-    border-radius: 4px;
-    border: none;
-    background: #222;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--glass-border);
+    background: rgba(30, 41, 59, 0.8);
     color: white;
-    font-size: 16px;
+    font-size: 0.95rem;
     cursor: pointer;
     outline: none;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-#model-select:hover {
-    background: #333;
+#model-select:hover, #model-select:focus {
+    background: rgba(51, 65, 85, 0.9);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+#model-select option {
+    background: #1e293b;
+    color: #fff;
+}
+
+/* --- Footer Centrado y Moderno --- */
+.footer {
+    position: absolute;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%); /* Centrado horizontal perfecto */
+    z-index: 10;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 50px; /* Borde muy redondeado tipo píldora */
+    padding: 10px 14px 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.footer p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    font-weight: 500;
+    margin: 0;
+}
+
+/* --- Botón de GitHub en el Footer --- */
+.github-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 16px;
+    border-radius: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.github-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.github-btn i {
+    font-size: 1.1rem;
+}
+
+/* --- Ajuste para el menú de lil-gui --- */
+.lil-gui.root {
+    margin-top: 0 !important;
+    top: 80px !important;     /* A la misma altura que el panel izquierdo */
+    right: 20px !important;
+    max-height: calc(100vh - 120px) !important;
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4) !important;
+    border: 1px solid var(--glass-border);
+}
+/* --- Nuevos Botones en el Panel Izquierdo --- */
+.divider {
+    width: 1px;
+    height: 24px;
+    background: var(--glass-border);
+    margin: 0 5px;
+}
+
+.icon-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.icon-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
+}
+
+/* --- Ventana Modal de Ayuda --- */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-content {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 30px;
+    width: 90%;
+    max-width: 450px;
+    position: relative;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    transform: translateY(0);
+    transition: transform 0.3s ease;
+}
+
+.modal.hidden .modal-content {
+    transform: translateY(-20px);
+}
+
+.modal-content h2 {
+    font-size: 1.4rem;
+    margin-bottom: 20px;
+    color: #fff;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 10px;
+}
+
+.help-list {
+    list-style: none;
+}
+
+.help-list li {
+    margin-bottom: 15px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.help-list li i {
+    color: var(--accent-color);
+    width: 20px;
+    text-align: center;
+    margin-right: 10px;
+}
+
+.help-list li b {
+    color: #fff;
+}
+
+.close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.close-btn:hover {
+    color: #ef4444; /* Rojo al pasar el ratón */
 }

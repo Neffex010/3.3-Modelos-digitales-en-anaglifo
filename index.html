@@ -5,9 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mixamo Anaglifo 3D + Controles</title>
     <link rel="stylesheet" href="main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
 <body>
-    <div id="ui">
+    <!-- Título de la App -->
+    <div class="app-title">
+        <h1>Visor 3D Anaglifo</h1>
+    </div>
+
+    <!-- Panel flotante izquierdo con herramientas -->
+    <div id="ui" class="left-panel">
         <label for="model-select">Animación:</label>
         <select id="model-select">
             <option value="Capoeira.fbx">Capoeira</option>
@@ -16,7 +23,34 @@
             <option value="Standard Run.fbx" selected>Standard Run</option>
             <option value="Thriller Part 3.fbx">Thriller Part 3</option>
         </select>
+        
+        <!-- Nuevos botones -->
+        <div class="divider"></div>
+        <button id="btn-fullscreen" class="icon-btn" title="Pantalla Completa"><i class="fas fa-expand"></i></button>
+        <button id="btn-help" class="icon-btn" title="Ayuda"><i class="fas fa-question-circle"></i></button>
     </div>
+
+    <!-- Modal de Ayuda (Oculto por defecto) -->
+    <div id="help-modal" class="modal hidden">
+        <div class="modal-content">
+            <button id="close-modal" class="close-btn"><i class="fas fa-times"></i></button>
+            <h2><i class="fas fa-gamepad"></i> Controles del Visor</h2>
+            <ul class="help-list">
+                <li><i class="fas fa-mouse-pointer"></i> <b>Click Izquierdo:</b> Rotar la cámara alrededor del personaje.</li>
+                <li><i class="fas fa-arrows-alt"></i> <b>Click Derecho:</b> Desplazar la cámara (Pan).</li>
+                <li><i class="fas fa-search-plus"></i> <b>Rueda del Ratón:</b> Acercar o alejar (Zoom).</li>
+                <li><i class="fas fa-glasses"></i> <b>Efecto Anaglifo:</b> Requiere lentes Rojo/Cian para percibir la profundidad 3D.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2026 Visualizador 3D - Controles Estereoscópicos</p>
+        <a href="https://github.com/TuUsuario/TuRepositorio" target="_blank" class="github-btn" rel="noopener noreferrer">
+            <i class="fab fa-github"></i> Ver en GitHub
+        </a>
+    </footer>
 
     <script type="importmap">
         {
