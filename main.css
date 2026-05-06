@@ -117,23 +117,24 @@ body {
     box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
 }
 
-/* --- Footer Centrado y Moderno --- */
+/* --- Footer Ajustado (Hacia la izquierda para evitar choques) --- */
 .footer {
     position: absolute;
     bottom: 25px;
-    left: 50%;
-    transform: translateX(-50%); /* Centrado horizontal perfecto */
+    left: 70px; /* Movido de '50%' a la izquierda */
+    transform: none; /* Quitamos el translateX(-50%) */
     z-index: 10;
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
-    border-radius: 50px; /* Borde muy redondeado tipo píldora */
+    border-radius: 50px; 
     padding: 10px 14px 10px 24px;
     display: flex;
     align-items: center;
     gap: 20px;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+    pointer-events: auto; /* Asegúrate de que esto permita clics para el botón GitHub */
 }
 
 .footer p {
