@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
 <body>
+    <!-- Pantalla de Carga (Overlay) -->
+    <div id="loader" class="loader-overlay">
+        <div class="spinner"></div>
+        <div class="loader-text" id="loader-title">Cargando entorno 3D</div>
+        <div class="loader-subtext" id="load-progress">Iniciando...</div>
+    </div>
     <!-- Título de la App -->
     <div class="app-title">
         <h1>Visor 3D Anaglifo</h1>
@@ -30,17 +36,99 @@
         <button id="btn-help" class="icon-btn" title="Ayuda"><i class="fas fa-question-circle"></i></button>
     </div>
 
-    <!-- Modal de Ayuda (Oculto por defecto) -->
+    <!-- Modal de Ayuda Completo con Tabs (Oculto por defecto) -->
     <div id="help-modal" class="modal hidden">
-        <div class="modal-content">
-            <button id="close-modal" class="close-btn"><i class="fas fa-times"></i></button>
-            <h2><i class="fas fa-gamepad"></i> Controles del Visor</h2>
-            <ul class="help-list">
-                <li><i class="fas fa-mouse-pointer"></i> <b>Click Izquierdo:</b> Rotar la cámara alrededor del personaje.</li>
-                <li><i class="fas fa-arrows-alt"></i> <b>Click Derecho:</b> Desplazar la cámara (Pan).</li>
-                <li><i class="fas fa-search-plus"></i> <b>Rueda del Ratón:</b> Acercar o alejar (Zoom).</li>
-                <li><i class="fas fa-glasses"></i> <b>Efecto Anaglifo:</b> Requiere lentes Rojo/Cian para percibir la profundidad 3D.</li>
-            </ul>
+        <div class="modal-content modal-large">
+            <!-- CABECERA -->
+            <div class="hm-header">
+                <div class="hm-title">
+                    🎬 Visor Anaglifo 3D
+                    <span class="hm-badge">Guía de uso</span>
+                </div>
+                <button id="close-modal" class="close-btn" title="Cerrar (Esc)"><i class="fas fa-times"></i></button>
+            </div>
+
+            <!-- TABS -->
+            <div class="hm-tabs">
+                <button class="hm-tab active" data-tab="inicio">🚀 Inicio rápido</button>
+                <button class="hm-tab" data-tab="lentes">👓 Lentes</button>
+                <button class="hm-tab" data-tab="controles">🎛️ Controles</button>
+                <button class="hm-tab" data-tab="profundidad">📐 Efecto 3D</button>
+                <button class="hm-tab" data-tab="problemas">🔧 Problemas</button>
+            </div>
+
+            <!-- CUERPO -->
+            <div class="hm-body">
+
+                <!-- ── TAB INICIO RÁPIDO ── -->
+                <div class="hm-panel active" data-panel="inicio">
+                    <h3>Pasos para ver en 3D</h3>
+                    <ul class="hm-steps">
+                        <li>
+                            <div class="step-num">1</div>
+                            <div class="step-text"><strong>Consigue lentes anaglifo rojo/cian.</strong><br>El filtro rojo va en el ojo izquierdo, el cian en el derecho.</div>
+                        </li>
+                        <li>
+                            <div class="step-num">2</div>
+                            <div class="step-text"><strong>Activa el anaglifo.</strong><br>En el menú derecho → 🎬 Anaglifo → activa "Activar Anaglifo".</div>
+                        </li>
+                        <li>
+                            <div class="step-num">3</div>
+                            <div class="step-text"><strong>Elige el modo.</strong><br>Empieza con Color. Si ves imagen doble, cambia a Grises.</div>
+                        </li>
+                        <li>
+                            <div class="step-num">4</div>
+                            <div class="step-text"><strong>Ajusta la profundidad.</strong><br>Baja la Distancia focal a 3-4 para que las cosas salgan de la pantalla.</div>
+                        </li>
+                    </ul>
+                    <div class="hm-tip"><span class="tip-icon">🖱️</span><div class="tip-text"><strong>Navegación:</strong> Clic izq para rotar, rueda para zoom, clic der para desplazar.</div></div>
+                </div>
+
+                <!-- ── TAB LENTES ── -->
+                <div class="hm-panel" data-panel="lentes">
+                    <h3>Tipos de lentes</h3>
+                    <div class="hm-cards">
+                        <div class="hm-card"><div class="card-icon">🔴🩵</div><div class="card-title">Rojo / Cian</div><div class="card-desc">Estándar. Usar modo Color o Grises.</div></div>
+                        <div class="hm-card"><div class="card-icon">🩵🔴</div><div class="card-title">Cian / Rojo</div><div class="card-desc">Invertido. Usar modo Negativo.</div></div>
+                        <div class="hm-card"><div class="card-icon">🔴🔵</div><div class="card-title">Rojo / Azul</div><div class="card-desc">Usar modo Grises.</div></div>
+                    </div>
+                    <div class="hm-tip warn"><span class="tip-icon">⚠️</span><div class="tip-text">Lentes de sol 3D de cine (polarizadas) NO funcionan aquí.</div></div>
+                </div>
+
+                <!-- ── TAB CONTROLES ── -->
+                <div class="hm-panel" data-panel="controles">
+                    <h3>Referencia del menú</h3>
+                    <ul class="hm-steps">
+                        <li><div class="step-text"><strong>Separación ocular:</strong> Más alto = más efecto 3D pero más fantasma visual (Ideal: 0.064).</div></li>
+                        <li><div class="step-text"><strong>Distancia focal:</strong> Plano donde la vista descansa. Objetos más cerca de este valor saldrán de la pantalla.</div></li>
+                        <li><div class="step-text"><strong>Modos de profundidad:</strong> Puedes apagar el fondo o el primer plano si te marea.</div></li>
+                    </ul>
+                </div>
+
+                <!-- ── TAB PROFUNDIDAD ── -->
+                <div class="hm-panel" data-panel="profundidad">
+                    <h3>Los 3 planos</h3>
+                    <div class="hm-cards">
+                        <div class="hm-card"><div class="card-title">↗️ Primer plano</div><div class="card-desc">Esferas y anillos. Salen de la pantalla.</div></div>
+                        <div class="hm-card"><div class="card-title">▪️ Plano focal</div><div class="card-desc">Personaje. Se percibe en la pantalla física.</div></div>
+                        <div class="hm-card"><div class="card-title">↘️ Fondo</div><div class="card-desc">Pilares. Sensación de hueco hacia adentro.</div></div>
+                    </div>
+                </div>
+
+                <!-- ── TAB PROBLEMAS ── -->
+                <div class="hm-panel" data-panel="problemas">
+                    <h3>Soluciones rápidas</h3>
+                    <div class="hm-tip"><span class="tip-icon">👻</span><div class="tip-text"><strong>Veo imagen doble:</strong> Baja la Separación ocular o usa modo Grises.</div></div>
+                    <div class="hm-tip"><span class="tip-icon">🌑</span><div class="tip-text"><strong>Se ve oscuro:</strong> Sube el Brillo ambiental a 4 en Iluminación.</div></div>
+                    <div class="hm-tip"><span class="tip-icon">😵</span><div class="tip-text"><strong>Mareo:</strong> Aléjate a 60cm del monitor y descansa la vista.</div></div>
+                </div>
+
+            </div><!-- /hm-body -->
+
+            <!-- FOOTER DEL MODAL -->
+            <div class="hm-footer">
+                <label><input type="checkbox" id="hm-no-show"> No mostrar al iniciar</label>
+            </div>
         </div>
     </div>
 

@@ -322,6 +322,13 @@ let currentMixer  = null;
 let currentAnimationSpeed = 1.0;
 const clock = new THREE.Clock();
 
+// --- NUEVAS VARIABLES PARA EL LOADER ---
+const loaderOverlay = document.getElementById('loader');
+const loaderTitle = document.getElementById('loader-title');
+const progressText = document.getElementById('load-progress');
+let loadedCount = 0;
+const totalModels = MODEL_FILES.length;
+
 function loadAllModels() {
     const promises = MODEL_FILES.map(filename => new Promise((resolve, reject) => {
         loader.load(MODELS_PATH + filename, fbx => {
@@ -345,6 +352,13 @@ function loadAllModels() {
             scene.add(fbx);
             modelsCache[filename] = { model: fbx, mixer };
             console.log(`✔ ${filename} cargado`);
+            
+            // --- ACTUALIZAR PANTALLA DE CARGA ---
+            loadedCount++;
+            if (progressText) {
+                progressText.innerText = `Cargando: ${loadedCount} de ${totalModels} animaciones...`;
+            }
+            
             resolve();
         }, undefined, err => {
             console.error(`✘ Error cargando ${filename}:`, err);
@@ -382,14 +396,14 @@ function switchModel(filename) {
 const guiSettings = {
     // --- Render ---
     anaglifo:        true,
-    modoAnaglifo:   'Color',          // Color | Grises | Negativo
+    modoAnaglifo:   'Color',
 
     // --- Estéreo ---
     eyeSeparation:   eyeSep,
-    focalDistance:   focalDistance,   // plano de convergencia
+    focalDistance:   focalDistance,
 
     // --- Escena 3D ---
-    modo3D:         'Completo',       // Completo | Solo primer plano | Solo fondo | Sin elementos
+    modo3D:         'Completo',
     particulas:      true,
     esferasFlotantes: true,
     pilares:         true,
@@ -404,7 +418,52 @@ const guiSettings = {
     // --- Modelo ---
     animSpeed: 1.0,
     scale: 0.01,
-    posX: 0, posY: 0.2, posZ: 0
+    posX: 0, posY: 0.2, posZ: 0,
+
+    // --- NUEVO BOTÓN AUTOMÁTICO ---
+    efectoPopOut: () => {
+        if (currentModel) {
+            // 1. Movemos el personaje físicamente hacia adelante
+            currentModel.position.z = 3.5;
+            guiSettings.posZ = 3.5;
+            
+            // 2. Aumentamos un poco la separación ocular para exagerar el efecto 3D
+            eyeSep = 0.08;
+            guiSettings.eyeSeparation = 0.08;
+
+            // 3. Empujamos el plano focal hacia atrás para asegurar el paralaje negativo
+            focalDistance = 7;
+            guiSettings.focalDistance = 7;
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            controls.target.copy(camera.position).addScaledVector(dir, focalDistance);
+            controls.update();
+
+            // Actualizamos la interfaz para que los deslizadores se muevan solos
+            updateAllGUIControllers();
+        }
+    },
+
+    reset: () => {
+        if (currentModel) {
+            currentModel.scale.set(0.01, 0.01, 0.01);
+            currentModel.position.set(0, 0.2, 0);
+            guiSettings.scale = 0.01;
+            guiSettings.posX = 0; guiSettings.posY = 0.2; guiSettings.posZ = 0;
+            
+            // Restauramos también la cámara
+            eyeSep = 0.064;
+            guiSettings.eyeSeparation = 0.064;
+            focalDistance = 6;
+            guiSettings.focalDistance = 6;
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            controls.target.copy(camera.position).addScaledVector(dir, focalDistance);
+            controls.update();
+
+            updateAllGUIControllers();
+        }
+    }
 };
 
 // Mapas de modo → valor uniform
@@ -544,6 +603,7 @@ modelFolder
 modelFolder
     .add(guiSettings, 'posZ', -5, 5, 0.01).name('Pos Z')
     .onChange(v => { if (currentModel) currentModel.position.z = v; });
+ modelFolder.add(guiSettings, 'efectoPopOut').name('🚀 ¡Que SALGA de pantalla!');
 modelFolder
     .add({ reset: () => {
         if (currentModel) {
@@ -651,21 +711,46 @@ window.addEventListener('resize', () => {
 });
 
 // ============================================================
-// INICIO
+// INICIO Y TRANSICIONES
 // ============================================================
 const selectElement = document.getElementById('model-select');
-selectElement.addEventListener('change', e => switchModel(e.target.value));
+
+// Lógica de transición suave al cambiar de animación
+selectElement.addEventListener('change', e => {
+    // 1. Mostrar pantalla de carga
+    loaderTitle.innerText = "Aplicando animación";
+    progressText.innerText = e.target.value.replace('.fbx', '');
+    loaderOverlay.classList.remove('hidden');
+
+    // 2. Dar tiempo a que el overlay oscuro cubra la pantalla (300ms)
+    setTimeout(() => {
+        switchModel(e.target.value); // Cambiamos el modelo sin que el usuario lo vea de golpe
+        
+        // 3. Volver a ocultar la pantalla de carga (fade in)
+        setTimeout(() => {
+            loaderOverlay.classList.add('hidden');
+        }, 200); 
+    }, 300);
+});
 
 quadMesh.material.uniforms.mode.value = 0;
 
+// Carga inicial
 loadAllModels()
     .then(() => {
         console.log('✅ Todos los modelos listos');
         switchModel(selectElement.value);
         animate();
+        
+        // Ocultamos la pantalla de carga principal tras medio segundo de respiro
+        setTimeout(() => {
+            loaderOverlay.classList.add('hidden');
+        }, 500);
     })
     .catch(err => {
         console.error('❌ Fallo en carga de modelos:', err);
+        progressText.innerText = "Error al cargar. Revisa la consola.";
+        progressText.style.color = "#ef4444"; // Color rojo de error
         animate();
     });
 
@@ -673,12 +758,13 @@ loadAllModels()
 // MONITOR DE RENDIMIENTO (FPS)
 // ============================================================
 const stats = new Stats();
-// Lo posicionamos abajo a la derecha para que no estorbe
+// Lo posicionamos arriba a la derecha, justo sobre el menú de controles
 stats.dom.style.position = 'absolute';
-stats.dom.style.bottom = '20px';
-stats.dom.style.right = '20px';
-stats.dom.style.top = 'auto'; // Quitamos el top por defecto
+stats.dom.style.top = '15px';       // Lo anclamos arriba
+stats.dom.style.right = '20px';     // Alineado a la derecha con el menú
+stats.dom.style.bottom = 'auto';    // Quitamos el anclaje de abajo para que no de problemas
 stats.dom.style.left = 'auto';
+stats.dom.style.zIndex = '10';      // Aseguramos que se mantenga por encima
 document.body.appendChild(stats.dom);
 
 // ============================================================
@@ -688,6 +774,8 @@ const btnFullscreen = document.getElementById('btn-fullscreen');
 const btnHelp = document.getElementById('btn-help');
 const helpModal = document.getElementById('help-modal');
 const closeModal = document.getElementById('close-modal');
+const checkbox = document.getElementById('hm-no-show');
+const SKIP_KEY = 'anagliph3d_help_skip';
 
 // Lógica de Pantalla Completa
 btnFullscreen.addEventListener('click', () => {
@@ -704,18 +792,48 @@ btnFullscreen.addEventListener('click', () => {
     }
 });
 
-// Lógica de Ventana Modal de Ayuda
-btnHelp.addEventListener('click', () => {
-    helpModal.classList.remove('hidden');
-});
+// Abrir y cerrar Modal
+const openModal = () => helpModal.classList.remove('hidden');
+const closeHelpModal = () => helpModal.classList.add('hidden');
 
-closeModal.addEventListener('click', () => {
-    helpModal.classList.add('hidden');
-});
+btnHelp.addEventListener('click', openModal);
+closeModal.addEventListener('click', closeHelpModal);
 
-// Cerrar modal haciendo clic afuera del contenido
+// Cerrar clicando afuera o con la tecla Escape
 helpModal.addEventListener('click', (e) => {
-    if (e.target === helpModal) {
-        helpModal.classList.add('hidden');
+    if (e.target === helpModal) closeHelpModal();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !helpModal.classList.contains('hidden')) closeHelpModal();
+});
+
+// Guardar preferencia de "No mostrar"
+if(checkbox) {
+    checkbox.checked = localStorage.getItem(SKIP_KEY) === '1';
+    checkbox.addEventListener('change', () => {
+        localStorage.setItem(SKIP_KEY, checkbox.checked ? '1' : '0');
+    });
+
+    // Mostrar automáticamente si es la primera vez
+    if (localStorage.getItem(SKIP_KEY) !== '1') {
+        setTimeout(openModal, 700);
     }
+}
+
+// Lógica de navegación de las pestañas (Tabs)
+const tabs = document.querySelectorAll('.hm-tab');
+const panels = document.querySelectorAll('.hm-panel');
+
+tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        
+        // Quitar 'active' de todos los tabs y paneles
+        tabs.forEach(t => t.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+        
+        // Agregar 'active' al seleccionado
+        tab.classList.add('active');
+        document.querySelector(`.hm-panel[data-panel="${target}"]`).classList.add('active');
+    });
 });
